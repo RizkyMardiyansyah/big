@@ -34,6 +34,16 @@ Hanya MSSQL yang sudah disiapkan driver-nya (`mssql`). Klien lain belum diuji.
 ## Produksi
 `npm run build` menghasilkan `dist/`. `npm start` menjalankan API sekaligus melayani `dist/` (fallback SPA bawaan). Set `APP_URL` ke URL publik. Pasang di belakang HTTPS (reverse proxy). Cadangkan `STORAGE_DIR` bersama database.
 
+## Deploy di Vercel (semua dalam satu proyek)
+Frontend dibuild Vite (`dist/`), API Express berjalan sebagai Serverless Function lewat `api/index.js`; `vercel.json` meneruskan `/api/*` ke fungsi itu dan sisanya ke `index.html`.
+1. Siapkan database online (mis. Postgres di Neon/Supabase; `DB_CLIENT=pg`, `DB_URL=...`). Gunakan connection string *pooled* bila tersedia.
+2. Dari komputer Anda, isi `.env` dengan database online lalu jalankan `npm install`, `npm run db:migrate`, `npm run db:seed`, dan `create-admin`.
+3. Import repo ke Vercel (preset Vite). Isi Environment Variables seperti di `.env.example` (blok "Deploy di Vercel") dan `AUTO_MIGRATE=false`.
+4. Cek `https://domain-anda.vercel.app/api/health` harus `{"ok":true,...}`.
+- Berkas (dokumen, struk, foto profil) kini disimpan di tabel `file_blobs` (migrasi `009`), bukan di disk. Berkas lama di `STORAGE_DIR` tetap terbaca.
+- Batas upload di Vercel 4 MB per berkas (batas body fungsi ~4,5 MB).
+- Cold start pertama bisa lebih lambat; menjalankan di server Node biasa (`npm run build && npm start`) tetap didukung.
+
 ## Fitur
 Landing publik (hero, layanan, berita, form kontak dengan rate limit); login, ubah dan reset kata sandi; profil dengan foto; RBAC dinamis (peran, matriks izin); pengguna (buat, peran, aktif/nonaktif, reset sandi; Super Admin aktif terakhir dilindungi); proyek + Kanban task; cuti (Senin-Jumat, tanpa libur nasional, cek tabrakan); reimbursement + struk privat; mesin persetujuan sekuensial dengan penjaga aksi ganda; pembatalan; notifikasi; audit log; CMS (umum, layanan, artikel teks biasa anti-XSS).
 - **Dokumen**: unggah (maks 10 MB; PDF, PNG, JPG, TXT, CSV, DOCX, XLSX, PPTX; tipe dicek dari ekstensi dan isi berkas), folder, kategori, pencarian dan filter, pratinjau (PDF/gambar), unduh, ubah nama, arsip/pulihkan, hapus. Akses per dokumen: semua pengguna, anggota proyek, atau hanya pengunggah (pengelola dokumen melihat semua). Riwayat versi belum ada.

@@ -1,8 +1,7 @@
-import {Router} from 'express';import multer from 'multer';import {mkdir,writeFile,unlink} from 'fs/promises';import path from 'path';
+import {Router} from 'express';import multer from 'multer';import {putFile,getFile,delFile,LIMIT} from '../files.js';
 import {db} from '../db.js';import {authn,need} from '../auth.js';import {wrap,bad,uid,audit,notify,nextNumber,isD,pick} from '../lib.js';import {createInstance,cancel,act} from '../approvals.js';
 const r=Router();r.use(authn);
-const STORE=path.resolve(process.env.STORAGE_DIR||'./storage','receipts');
-const up=multer({storage:multer.memoryStorage(),limits:{fileSize:5*1024*1024,files:1}});
+const up=multer({storage:multer.memoryStorage(),limits:{fileSize:LIMIT(5*1024*1024),files:1}});
 const MAGIC={'image/jpeg':[0xFF,0xD8,0xFF],'image/png':[0x89,0x50,0x4E,0x47],'application/pdf':[0x25,0x50,0x44,0x46]};
 const workdays=(s,e)=>{let n=0;for(let d=new Date(s+'T00:00:00Z');d<=new Date(e+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+1)){const w=d.getUTCDay();if(w&&w<6)n++}return n};
 const count=async q=>Number((await q.count({c:'*'}).first()).c);
@@ -55,16 +54,16 @@ r.post('/reimbursements',need('reimbursements.submit'),up.single('receipt'),wrap
  const c=await db('expense_categories').where({id:b.category_id,active:true}).first();if(!c)throw bad('Invalid category');
  if(!(amount>0))throw bad('Amount must be greater than 0');if(!isD(b.expense_date)||b.expense_date>new Date().toISOString().slice(0,10))throw bad('Invalid expense date');
  if(!String(b.description||'').trim())throw bad('Business purpose is required');if(c.receipt_required&&!f)throw bad('A receipt is required for this category');
- let fname=null;if(f){const m=MAGIC[f.mimetype];if(!m||!m.every((x,i)=>f.buffer[i]===x))throw bad('The receipt must be a valid JPG, PNG, or PDF');fname=uid();await mkdir(STORE,{recursive:true});await writeFile(path.join(STORE,fname),f.buffer)}
+ let fname=null;if(f){const m=MAGIC[f.mimetype];if(!m||!m.every((x,i)=>f.buffer[i]===x))throw bad('The receipt must be a valid JPG, PNG, or PDF');fname=uid();await putFile('receipts',fname,f.buffer)}
  const id=uid();try{await db.transaction(async t=>{const no=await nextNumber(t,'RB');
   await t('reimbursement_requests').insert({id,request_number:no,employee_id:req.user.id,category_id:c.id,amount,currency:String(b.currency||'IDR').toUpperCase().slice(0,3),expense_date:b.expense_date,description:String(b.description).trim().slice(0,1000),receipt_file:fname,receipt_name:f?.originalname?.slice(0,200)||null,receipt_mime:f?.mimetype||null,status:'pending',finance_ready:false,created_at:new Date()});
-  await createInstance(t,'reimbursement',id,req.user.id,no);await audit(t,req.user.id,'submit','reimbursement_request',id,`${b.currency||'IDR'} ${amount}`)})}catch(e){if(fname)await unlink(path.join(STORE,fname)).catch(()=>{});throw e}
+  await createInstance(t,'reimbursement',id,req.user.id,no);await audit(t,req.user.id,'submit','reimbursement_request',id,`${b.currency||'IDR'} ${amount}`)})}catch(e){if(fname)await delFile('receipts',fname);throw e}
  res.status(201).json({id})}));
 r.post('/reimbursements/:id/cancel',wrap(async(req,res)=>{await db.transaction(t=>cancel(t,'reimbursement',req.params.id,req.user.id));res.json({ok:true})}));
 r.get('/reimbursements/:id/receipt',wrap(async(req,res)=>{const x=await db('reimbursement_requests').where({id:req.params.id}).first();if(!x||!x.receipt_file)throw bad('Receipt not found',404);
  const roles=await db('user_roles').where({user_id:req.user.id}).pluck('role_id');
  const ok=x.employee_id===req.user.id||req.perms.includes('reimbursements.manage')||!!await db('approval_steps').where({request_type:'reimbursement',request_id:x.id}).whereIn('approver_role',roles).first();
- if(!ok)throw bad('You do not have permission',403);res.set({'Content-Type':x.receipt_mime,'X-Content-Type-Options':'nosniff','Content-Disposition':'inline'});res.sendFile(path.join(STORE,x.receipt_file))}));
+ if(!ok)throw bad('You do not have permission',403);res.set({'Content-Type':x.receipt_mime,'X-Content-Type-Options':'nosniff','Content-Disposition':'inline'});const buf=await getFile('receipts',x.receipt_file);if(!buf)throw bad('Receipt not found',404);res.send(buf)}));
 
 // ---- Persetujuan
 r.get('/approvals',need('approvals.view'),wrap(async(req,res)=>{const me=req.user.id,roles=await db('user_roles').where({user_id:me}).pluck('role_id');if(!req.perms.includes('approvals.approve'))return res.json([]);
