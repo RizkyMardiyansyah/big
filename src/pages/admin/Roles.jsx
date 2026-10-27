@@ -1,0 +1,16 @@
+import {useState} from 'react';import {useMutation,useQueryClient} from '@tanstack/react-query';import {api,useGet} from '../../lib/api';import {Head,Err,Need} from '../../lib/ui';
+const ACTS=['view','create','edit','delete','submit','approve','manage'];
+export default function Roles(){const qc=useQueryClient(),[sel,setSel]=useState(null),[err,setErr]=useState(null),[msg,setMsg]=useState('');
+ const roles=useGet('/admin/roles'),perms=useGet('/admin/permissions');
+ const start=r=>{setErr(null);setMsg('');setSel(r?{id:r.id,name:r.name,description:r.description||'',sys:r.is_system,perms:r.perms||[]}:{id:null,name:'',description:'',sys:false,perms:[]})};
+ const done=t=>()=>{setErr(null);setMsg(t);setSel(null);qc.invalidateQueries({queryKey:['/admin/roles']})};
+ const save=useMutation({mutationFn:()=>api(sel.id?`/admin/roles/${sel.id}`:'/admin/roles',{method:sel.id?'PUT':'POST',body:{name:sel.name,description:sel.description,perms:sel.perms}}),onSuccess:done('Role saved.'),onError:setErr});
+ const del=useMutation({mutationFn:id=>api(`/admin/roles/${id}`,{method:'DELETE'}),onSuccess:done('Role deleted.'),onError:setErr});
+ const res=[...new Set(perms.data?.map(p=>p.code.split('.')[0]))];const has=c=>sel.perms.includes(c);
+ const tog=c=>setSel({...sel,perms:has(c)?sel.perms.filter(x=>x!==c):[...sel.perms,c]});
+ return <Need p="roles.manage"><Head title="Roles & permissions"><button className="btn" onClick={()=>start(null)}>New role</button></Head><Err e={err||roles.error}/>{msg&&<p className="mb-3 text-ok">{msg}</p>}
+ <div className="grid gap-6 lg:grid-cols-[16rem_1fr]"><div className="card space-y-1 !p-2">{roles.data?.map(r=><button key={r.id} onClick={()=>start(r)} className={`block w-full rounded-lg px-3 py-2 text-left hover:bg-bg ${sel?.id===r.id?'bg-bg font-medium':''}`}>{r.name}{r.is_system&&<span className="ml-2 text-xs text-sub">system</span>}</button>)}</div>
+ {sel?<form className="card space-y-4" onSubmit={e=>{e.preventDefault();save.mutate()}}><div className="grid gap-3 sm:grid-cols-2"><input required disabled={sel.sys} className="inp" placeholder="Role name" value={sel.name} onChange={e=>setSel({...sel,name:e.target.value})}/><input disabled={sel.sys} className="inp" placeholder="Description" value={sel.description} onChange={e=>setSel({...sel,description:e.target.value})}/></div>
+ <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr><th>Resource</th>{ACTS.map(a=><th key={a} className="text-center">{a}</th>)}</tr></thead><tbody>
+ {res.map(r=><tr key={r} className="border-t border-line"><td className="font-medium">{r}</td>{ACTS.map(a=>{const c=`${r}.${a}`,ex=perms.data?.some(p=>p.code===c);return <td key={a} className="text-center">{ex&&<input type="checkbox" aria-label={c} disabled={sel.sys} checked={has(c)} onChange={()=>tog(c)}/>}</td>})}</tr>)}</tbody></table></div>
+ {sel.sys?<p className="text-sub">System roles cannot be changed.</p>:<div className="flex gap-2"><button className="btn" disabled={save.isPending}>Save role</button>{sel.id&&<button type="button" className="btn2 !text-bad" onClick={()=>confirm('Delete this role?')&&del.mutate(sel.id)}>Delete</button>}</div>}</form>:<div className="card text-sub">Select a role on the left or create a new one.</div>}</div></Need>}

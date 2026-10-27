@@ -1,0 +1,8 @@
+import {useState} from 'react';import {useMutation,useQueryClient} from '@tanstack/react-query';import {api,useGet} from '../lib/api';import {Head,Err,Empty} from '../lib/ui';import {openReceipt} from './Reimbursements';
+export default function Approvals(){const qc=useQueryClient(),[c,setC]=useState({}),[err,setErr]=useState(null);const list=useGet('/approvals');
+ const act=useMutation({mutationFn:({id,decision})=>api(`/approvals/${id}/act`,{method:'POST',body:{decision,comment:c[id]||null}}),onSuccess:()=>{setErr(null);qc.invalidateQueries({queryKey:['/approvals']});qc.invalidateQueries({queryKey:['/notifications/unread-count']})},onError:setErr});
+ return <div><Head title="Approval inbox" sub="Requests waiting for your decision"/><Err e={err||list.error}/>{list.data?.length===0&&<Empty t="Nothing is waiting for your approval."/>}
+ <div className="space-y-3">{list.data?.map(r=><div key={r.step_id} className="card"><p className="font-medium">{r.request_number} <span className="font-normal text-sub">· {r.request_type==='leave'?'Leave':'Reimbursement'} · {r.requester}</span></p><p className="mt-1 text-sub">{r.summary}</p>
+ {r.receipt_for&&<button className="mt-1 text-primary" onClick={()=>openReceipt(r.receipt_for)}>View receipt</button>}
+ <input className="inp mt-3" placeholder="Comment (required when rejecting)" onChange={e=>setC({...c,[r.step_id]:e.target.value})}/>
+ <div className="mt-3 flex gap-2"><button className="btn" disabled={act.isPending} onClick={()=>act.mutate({id:r.step_id,decision:'approved'})}>Approve</button><button className="btn2 !text-bad" disabled={act.isPending} onClick={()=>act.mutate({id:r.step_id,decision:'rejected'})}>Reject</button></div></div>)}</div></div>}

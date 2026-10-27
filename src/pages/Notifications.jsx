@@ -1,0 +1,5 @@
+import {useMutation,useQueryClient} from '@tanstack/react-query';import {useNavigate} from 'react-router-dom';import {api,useGet} from '../lib/api';import {Head,Err,Empty} from '../lib/ui';
+export default function Notifications(){const qc=useQueryClient(),nav=useNavigate(),list=useGet('/notifications');
+ const read=useMutation({mutationFn:id=>api('/notifications/read',{method:'POST',body:{id}}),onSuccess:()=>{qc.invalidateQueries({queryKey:['/notifications']});qc.invalidateQueries({queryKey:['/notifications/unread-count']})}});
+ return <div><Head title="Notifications"><button className="btn2" onClick={()=>read.mutate(null)}>Mark all as read</button></Head><Err e={list.error||read.error}/>{list.data?.length===0&&<Empty t="No notifications yet."/>}
+ <div className="space-y-2">{list.data?.map(n=><button key={n.id} onClick={()=>{read.mutate(n.id);n.link&&nav(n.link)}} className={`card block w-full text-left ${n.is_read?'opacity-60':'border-l-4 border-l-primary'}`}><p className="font-medium">{n.title}</p><p className="text-xs text-sub">{new Date(n.created_at).toLocaleString('en-US')}</p></button>)}</div></div>}

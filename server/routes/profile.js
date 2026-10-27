@@ -1,0 +1,13 @@
+import {Router} from 'express';import multer from 'multer';import {mkdir,writeFile} from 'fs/promises';import path from 'path';
+import {db} from '../db.js';import {authn} from '../auth.js';import {wrap,bad,audit,pick} from '../lib.js';
+const r=Router();r.use(authn);const DIR=path.resolve(process.env.STORAGE_DIR||'./storage','avatars');
+const up=multer({storage:multer.memoryStorage(),limits:{fileSize:1024*1024,files:1}});
+r.get('/profile',wrap(async(req,res)=>{const u=await db('users').where({id:req.user.id}).first();const roles=await db('user_roles as ur').join('roles as r','r.id','ur.role_id').where('ur.user_id',u.id).pluck('r.name');res.json({id:u.id,email:u.email,full_name:u.full_name,department:u.department,job_title:u.job_title,has_avatar:!!u.avatar_mime,roles})}));
+r.patch('/profile',wrap(async(req,res)=>{const b=pick(req.body||{},['full_name','department','job_title']);for(const k in b)b[k]=String(b[k]||'').trim().slice(0,200);if('full_name'in b&&b.full_name.length<2)throw bad('Name must be at least 2 characters');
+ await db('users').where({id:req.user.id}).update(b);await audit(db,req.user.id,'update_profile','users',req.user.id);res.json({ok:true})}));
+r.post('/profile/avatar',up.single('avatar'),wrap(async(req,res)=>{const f=req.file;if(!f)throw bad('Choose an image');
+ const png=[0x89,0x50,0x4E,0x47].every((x,i)=>f.buffer[i]===x),jpg=[0xFF,0xD8,0xFF].every((x,i)=>f.buffer[i]===x);if(!png&&!jpg)throw bad('Photo must be PNG or JPG (max 1 MB)');
+ await mkdir(DIR,{recursive:true});await writeFile(path.join(DIR,req.user.id),f.buffer);await db('users').where({id:req.user.id}).update({avatar_mime:png?'image/png':'image/jpeg'});res.json({ok:true})}));
+r.get('/avatars/:id',wrap(async(req,res)=>{const u=await db('users').where({id:req.params.id}).first();if(!u||!u.avatar_mime)throw bad('No photo',404);
+ res.set({'Content-Type':u.avatar_mime,'X-Content-Type-Options':'nosniff','Cache-Control':'private, max-age=300'});res.sendFile(path.join(DIR,u.id))}));
+export default r;

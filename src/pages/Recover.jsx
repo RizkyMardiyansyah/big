@@ -1,0 +1,8 @@
+import {useState} from 'react';import {useNavigate,useSearchParams,Link} from 'react-router-dom';import {api} from '../lib/api';
+const Box=({title,children,onSubmit})=><main className="grid min-h-screen place-items-center bg-gradient-to-br from-[#EAF2FF] via-white to-[#F6FAFF] p-4"><form onSubmit={onSubmit} className="card w-full max-w-sm space-y-3"><img src="/logo.svg" alt="BIG Solutions" className="h-9 w-auto"/><h1 className="text-xl font-semibold">{title}</h1>{children}</form></main>;
+export function Forgot(){const [e,setE]=useState(''),[m,setM]=useState('');
+ return <Box title="Forgot password" onSubmit={async x=>{x.preventDefault();try{await api('/auth/forgot',{method:'POST',body:{email:e}});setM('If the email is registered, a reset link has been created.')}catch(er){setM(er.message)}}}>
+ <input className="inp" type="email" required placeholder="Email" value={e} onChange={x=>setE(x.target.value)}/><button className="btn w-full">Send reset link</button>{m&&<p role="status" className="text-sub">{m}</p>}<Link to="/login" className="text-primary">Back to sign in</Link></Box>}
+export function Reset(){const [p,setP]=useState(''),[m,setM]=useState(''),[sp]=useSearchParams(),nav=useNavigate();
+ return <Box title="Set a new password" onSubmit={async x=>{x.preventDefault();try{await api('/auth/reset',{method:'POST',body:{token:sp.get('token'),password:p}});nav('/login')}catch(er){setM(er.message)}}}>
+ <input className="inp" type="password" minLength={8} required placeholder="New password (min. 8 characters)" value={p} onChange={x=>setP(x.target.value)}/><button className="btn w-full">Save</button>{m&&<p role="alert" className="text-bad">{m}</p>}</Box>}
